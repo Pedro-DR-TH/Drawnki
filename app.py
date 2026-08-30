@@ -1,7 +1,7 @@
+import os
 import secrets
 import string
 import time
-import os
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -11,7 +11,7 @@ CORS(app)
 
 pairings = {}
 
-PAIRING_EXPIRY_SECONDS = 600  # 10 minutes
+PAIRING_EXPIRY_SECONDS = 600
 
 
 def generate_pairing_id() -> str:
@@ -29,6 +29,12 @@ def generate_pairing_code() -> str:
 
 def generate_device_token() -> str:
     return secrets.token_urlsafe(32)
+
+
+@app.route("/pair")
+def pair_page():
+    from flask import render_template
+    return render_template("pair.html")
 
 
 @app.route("/draw")
@@ -68,7 +74,6 @@ def api_pair_status():
 
     record = pairings[pairing_id]
 
-    # Expire stale pending pairings
     if record["status"] == "pending" and time.time() - record["created_at"] > PAIRING_EXPIRY_SECONDS:
         return jsonify({"status": "expired"}), 410
 
@@ -79,7 +84,6 @@ def api_pair_status():
         })
 
     return jsonify({"status": "pending"})
-
 
 
 @app.route("/api/pair/confirm", methods=["POST"])
@@ -101,7 +105,6 @@ def api_pair_confirm():
     record["device_token"] = generate_device_token()
 
     return jsonify({"status": "paired", "pairing_id": pairing_id})
-
 
 
 if __name__ == "__main__":
