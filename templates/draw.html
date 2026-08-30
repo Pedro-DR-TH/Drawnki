@@ -195,6 +195,19 @@ function resizeCanvas() {
   redraw();
 }
 
+const MAX_CONTACT_SIZE = 40; // px — anything wider/taller than this is treated as a palm, not a pen/finger tip
+
+function isPalmContact(e) {
+  // Apple Pencil (pointerType 'pen') is always trusted, regardless of reported size
+  if (e.pointerType === 'pen') return false;
+
+  // event.width/height report the contact ellipse size in CSS pixels.
+  // A resting palm covers a much larger area than a fingertip or pen tip.
+  const w = e.width || 0;
+  const h = e.height || 0;
+  return w > MAX_CONTACT_SIZE || h > MAX_CONTACT_SIZE;
+}
+
 function getPos(e) {
   const rect = canvas.getBoundingClientRect();
   return {
@@ -248,6 +261,8 @@ function drawStroke(stroke) {
 }
 
 canvas.addEventListener('pointerdown', (e) => {
+  if (isPalmContact(e)) return;
+
   canvas.setPointerCapture(e.pointerId);
   drawing = true;
   const pos = getPos(e);
@@ -261,6 +276,10 @@ canvas.addEventListener('pointerdown', (e) => {
 
 canvas.addEventListener('pointermove', (e) => {
   if (!drawing) return;
+  if (isPalmContact(e)) {
+    endStroke();
+    return;
+  }
   const pos = getPos(e);
   currentStroke.points.push(pos);
   drawStroke({ ...currentStroke, points: currentStroke.points.slice(-2) });
