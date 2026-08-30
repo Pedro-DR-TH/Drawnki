@@ -129,8 +129,7 @@ input.addEventListener('paste', (e) => {
   e.preventDefault();
   const pasted = (e.clipboardData || window.clipboardData).getData('text');
   isFormatting = true;
-  input.value = formatPairingCode(pasted);
-  input.setSelectionRange(input.value.length, input.value.length);
+  input.value = pasted.trim();
   isFormatting = false;
 });
 
