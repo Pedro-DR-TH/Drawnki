@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pair Your Deck</title>
+<title>Drawnki</title>
 <style>
   :root {
     --ink: #1a1a1a;
@@ -104,9 +104,38 @@ const input = document.getElementById('codeInput');
 const btn = document.getElementById('confirmBtn');
 const msg = document.getElementById('message');
 
-// auto-uppercase as they type, since codes are always uppercase
+function formatPairingCode(raw) {
+  // Strip everything except letters/digits, uppercase it
+  const clean = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+  // Drop a leading "ANKI" if the user typed it themselves - we add it back below
+  const withoutPrefix = clean.startsWith('ANKI') ? clean.slice(4) : clean;
+
+  // Take up to 8 remaining chars and split into two blocks of 4
+  const chars = withoutPrefix.slice(0, 8);
+  const block1 = chars.slice(0, 4);
+  const block2 = chars.slice(4, 8);
+
+  let formatted = 'ANKI';
+  if (block1) formatted += '-' + block1;
+  if (block2) formatted += '-' + block2;
+
+  return formatted;
+}
+
 input.addEventListener('input', () => {
-  input.value = input.value.toUpperCase();
+  const cursorWasAtEnd = input.selectionStart === input.value.length;
+  input.value = formatPairingCode(input.value);
+  if (cursorWasAtEnd) {
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+});
+
+input.addEventListener('focus', () => {
+  if (!input.value) {
+    input.value = 'ANKI-';
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
 });
 
 btn.addEventListener('click', submitCode);
