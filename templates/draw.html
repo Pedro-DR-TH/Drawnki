@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Drawnki</title>
 <style>
   :root {
@@ -10,429 +10,184 @@
     --paper: #fafaf8;
     --line: #ddd;
     --accent: #2f6fed;
+    --error: #c0392b;
   }
 
   * { box-sizing: border-box; }
 
-  html, body {
+  body {
     margin: 0;
-    height: 100%;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: var(--paper);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     color: var(--ink);
-    overflow: hidden;
-    /* prevent iPad from scrolling/zooming while drawing */
-    touch-action: none;
+    padding: 20px;
   }
 
-  .app {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
+  .card {
+    width: 100%;
+    max-width: 380px;
+    text-align: center;
   }
 
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--line);
-    flex-shrink: 0;
+  h1 {
+    font-size: 20px;
+    margin: 0 0 6px;
   }
 
-  header h1 {
-    font-size: 15px;
-    font-weight: 600;
-    margin: 0;
-    letter-spacing: 0.2px;
-  }
-
-  .side-toggle {
-    display: flex;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    overflow: hidden;
-  }
-
-  .side-toggle button {
-    border: none;
-    background: transparent;
-    padding: 6px 16px;
+  p.subtitle {
+    color: #666;
     font-size: 14px;
-    font-weight: 500;
-    color: var(--ink);
-    cursor: pointer;
+    margin: 0 0 28px;
   }
 
-  .side-toggle button.active {
+  input#codeInput {
+    width: 100%;
+    font-size: 22px;
+    letter-spacing: 2px;
+    text-align: center;
+    text-transform: uppercase;
+    padding: 14px 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin-bottom: 16px;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+  }
+
+  input#codeInput:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  button#confirmBtn {
+    width: 100%;
+    padding: 14px;
     background: var(--accent);
     color: white;
-  }
-
-  .canvas-wrap {
-    flex: 1;
-    position: relative;
-    min-height: 0;
-  }
-
-  canvas {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    touch-action: none;
-    background: white;
-  }
-
-  .toolbar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-    border-top: 1px solid var(--line);
-    flex-shrink: 0;
-    flex-wrap: wrap;
-  }
-
-  .toolbar button {
-    border: 1px solid var(--line);
-    background: white;
-    border-radius: 8px;
-    padding: 8px 14px;
-    font-size: 14px;
-    cursor: pointer;
-  }
-
-  .toolbar button:active {
-    background: #eee;
-  }
-
-  .swatch {
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    border: 2px solid var(--line);
-    cursor: pointer;
-    padding: 0;
-  }
-
-  .swatch.selected {
-    border-color: var(--ink);
-  }
-
-  .spacer { flex: 1; }
-
-  .save-btn {
-    background: var(--accent) !important;
-    color: white !important;
-    border: none !important;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
     font-weight: 600;
+    cursor: pointer;
   }
 
-  input[type="range"] {
-    width: 90px;
+  button#confirmBtn:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
+
+  .message {
+    margin-top: 16px;
+    font-size: 14px;
+    min-height: 20px;
+  }
+
+  .message.error { color: var(--error); }
+  .message.success { color: #22a35f; }
 </style>
 </head>
 <body>
-<div class="app">
-  <header>
-    <h1>New Card</h1>
-    <div class="side-toggle">
-      <button id="frontBtn" class="active">Front</button>
-      <button id="backBtn">Back</button>
-    </div>
-  </header>
+<div class="card">
+  <h1>Pair Your Deck</h1>
+  <p class="subtitle">Enter the code shown in Anki to connect it to this device.</p>
 
-  <div class="canvas-wrap">
-    <canvas id="canvas"></canvas>
-  </div>
-
-  <div class="toolbar">
-    <button class="swatch selected" data-color="#1a1a1a" style="background:#1a1a1a"></button>
-    <button class="swatch" data-color="#e0473a" style="background:#e0473a"></button>
-    <button class="swatch" data-color="#2f6fed" style="background:#2f6fed"></button>
-    <button class="swatch" data-color="#22a35f" style="background:#22a35f"></button>
-
-    <input type="range" id="widthSlider" min="1" max="16" value="3">
-
-    <button id="eraserBtn">Eraser</button>
-    <button id="undoBtn">Undo</button>
-    <button id="clearBtn">Clear</button>
-    <button id="uploadBtn">Upload Image</button>
-    <input type="file" id="fileInput" accept="image/*" style="display:none">
-
-    <div class="spacer"></div>
-
-    <button id="saveBtn" class="save-btn">Save Card</button>
-  </div>
+  <input id="codeInput" type="text" placeholder="ANKI-XXXX-XXXX" maxlength="14" autocomplete="off" autocapitalize="characters">
+  <button id="confirmBtn">Pair Deck</button>
+  <div id="message" class="message"></div>
 </div>
 
 <script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
+const input = document.getElementById('codeInput');
+const btn = document.getElementById('confirmBtn');
+const msg = document.getElementById('message');
 
-// Separate in-memory strokes per side so switching Front/Back doesn't lose work
-const sides = {
-  front: { strokes: [], redoStack: [], backgroundImage: null },
-  back: { strokes: [], redoStack: [], backgroundImage: null }
-};
-let currentSide = 'front';
+function formatPairingCode(raw) {
+  // Strip everything except letters/digits, uppercase it
+  const clean = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
-let currentColor = '#1a1a1a';
-let currentWidth = 3;
-let isErasing = false;
-let drawing = false;
-let currentStroke = null;
+  // Drop a leading "ANKI" if the user typed it themselves - we add it back below
+  const withoutPrefix = clean.startsWith('ANKI') ? clean.slice(4) : clean;
 
-function resizeCanvas() {
-  const rect = canvas.parentElement.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = rect.width * dpr;
-  canvas.height = rect.height * dpr;
-  ctx.scale(dpr, dpr);
-  redraw();
+  // Take up to 8 remaining chars and split into two blocks of 4
+  const chars = withoutPrefix.slice(0, 8);
+  const block1 = chars.slice(0, 4);
+  const block2 = chars.slice(4, 8);
+
+  let formatted = 'ANKI';
+  if (block1) formatted += '-' + block1;
+  if (block2) formatted += '-' + block2;
+
+  return formatted;
 }
 
-const MAX_CONTACT_SIZE = 40; // px — anything wider/taller than this is treated as a palm, not a pen/finger tip
-
-function isPalmContact(e) {
-  // Apple Pencil (pointerType 'pen') is always trusted, regardless of reported size
-  if (e.pointerType === 'pen') return false;
-
-  // event.width/height report the contact ellipse size in CSS pixels.
-  // A resting palm covers a much larger area than a fingertip or pen tip.
-  const w = e.width || 0;
-  const h = e.height || 0;
-  return w > MAX_CONTACT_SIZE || h > MAX_CONTACT_SIZE;
-}
-
-function getPos(e) {
-  const rect = canvas.getBoundingClientRect();
-  return {
-    x: e.clientX - rect.left,
-    y: e.clientY - rect.top,
-    pressure: e.pressure && e.pressure > 0 ? e.pressure : 0.5
-  };
-}
-
-function redraw() {
-  const rect = canvas.getBoundingClientRect();
-  ctx.clearRect(0, 0, rect.width, rect.height);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, rect.width, rect.height);
-
-  const bg = sides[currentSide].backgroundImage;
-  if (bg) {
-    drawImageContained(ctx, bg, rect.width, rect.height);
+input.addEventListener('input', () => {
+  const cursorWasAtEnd = input.selectionStart === input.value.length;
+  input.value = formatPairingCode(input.value);
+  if (cursorWasAtEnd) {
+    input.setSelectionRange(input.value.length, input.value.length);
   }
-
-  for (const stroke of sides[currentSide].strokes) {
-    drawStroke(stroke);
-  }
-}
-
-function drawImageContained(context, img, canvasW, canvasH) {
-  // scale the uploaded image to fit within the canvas, centered, preserving aspect ratio
-  const scale = Math.min(canvasW / img.width, canvasH / img.height);
-  const w = img.width * scale;
-  const h = img.height * scale;
-  const x = (canvasW - w) / 2;
-  const y = (canvasH - h) / 2;
-  context.drawImage(img, x, y, w, h);
-}
-
-function drawStroke(stroke) {
-  if (stroke.points.length < 2) return;
-  ctx.strokeStyle = stroke.erase ? '#ffffff' : stroke.color;
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-
-  for (let i = 1; i < stroke.points.length; i++) {
-    const p0 = stroke.points[i - 1];
-    const p1 = stroke.points[i];
-    ctx.lineWidth = stroke.width * (0.5 + p1.pressure);
-    ctx.beginPath();
-    ctx.moveTo(p0.x, p0.y);
-    ctx.lineTo(p1.x, p1.y);
-    ctx.stroke();
-  }
-}
-
-canvas.addEventListener('pointerdown', (e) => {
-  if (isPalmContact(e)) return;
-
-  canvas.setPointerCapture(e.pointerId);
-  drawing = true;
-  const pos = getPos(e);
-  currentStroke = {
-    color: currentColor,
-    width: currentWidth,
-    erase: isErasing,
-    points: [pos]
-  };
 });
 
-canvas.addEventListener('pointermove', (e) => {
-  if (!drawing) return;
-  if (isPalmContact(e)) {
-    endStroke();
+input.addEventListener('focus', () => {
+  if (!input.value) {
+    input.value = 'ANKI-';
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+});
+
+btn.addEventListener('click', submitCode);
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') submitCode();
+});
+
+async function submitCode() {
+  const code = input.value.trim();
+  if (!code) {
+    showMessage('Enter a code first.', 'error');
     return;
   }
-  const pos = getPos(e);
-  currentStroke.points.push(pos);
-  drawStroke({ ...currentStroke, points: currentStroke.points.slice(-2) });
-});
 
-function endStroke() {
-  if (!drawing) return;
-  drawing = false;
-  if (currentStroke && currentStroke.points.length > 1) {
-    sides[currentSide].strokes.push(currentStroke);
-    sides[currentSide].redoStack = [];
-  }
-  currentStroke = null;
-}
-
-canvas.addEventListener('pointerup', endStroke);
-canvas.addEventListener('pointercancel', endStroke);
-canvas.addEventListener('pointerleave', endStroke);
-
-// Toolbar behavior
-document.querySelectorAll('.swatch').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.swatch').forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
-    currentColor = btn.dataset.color;
-    isErasing = false;
-    document.getElementById('eraserBtn').textContent = 'Eraser';
-  });
-});
-
-document.getElementById('widthSlider').addEventListener('input', (e) => {
-  currentWidth = Number(e.target.value);
-});
-
-document.getElementById('eraserBtn').addEventListener('click', (e) => {
-  isErasing = !isErasing;
-  e.target.textContent = isErasing ? 'Erasing' : 'Eraser';
-});
-
-document.getElementById('undoBtn').addEventListener('click', () => {
-  const s = sides[currentSide];
-  if (s.strokes.length === 0) return;
-  s.redoStack.push(s.strokes.pop());
-  redraw();
-});
-
-document.getElementById('clearBtn').addEventListener('click', () => {
-  if (!confirm('Clear this side?')) return;
-  sides[currentSide].strokes = [];
-  sides[currentSide].redoStack = [];
-  sides[currentSide].backgroundImage = null;
-  redraw();
-});
-
-document.getElementById('uploadBtn').addEventListener('click', () => {
-  document.getElementById('fileInput').click();
-});
-
-document.getElementById('fileInput').addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    const img = new Image();
-    img.onload = () => {
-      sides[currentSide].backgroundImage = img;
-      redraw();
-    };
-    img.src = ev.target.result;
-  };
-  reader.readAsDataURL(file);
-
-  // reset so selecting the same file again still fires 'change'
-  e.target.value = '';
-});
-
-// Side toggle
-document.getElementById('frontBtn').addEventListener('click', () => switchSide('front'));
-document.getElementById('backBtn').addEventListener('click', () => switchSide('back'));
-
-function switchSide(side) {
-  currentSide = side;
-  document.getElementById('frontBtn').classList.toggle('active', side === 'front');
-  document.getElementById('backBtn').classList.toggle('active', side === 'back');
-  redraw();
-}
-
-// Save: export both sides as PNG data URLs and POST to backend
-document.getElementById('saveBtn').addEventListener('click', async () => {
-  const frontData = renderSideToDataURL('front');
-  const backData = renderSideToDataURL('back');
-
-  const params = new URLSearchParams(window.location.search);
-  const deviceToken = params.get('token'); // passed in from the pairing flow
+  btn.disabled = true;
+  showMessage('Pairing...', '');
 
   try {
-    const resp = await fetch('/api/cards/create', {
+    const resp = await fetch('/api/pair/confirm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        device_token: deviceToken,
-        front_image: frontData,
-        back_image: backData
-      })
+      body: JSON.stringify({ pairing_code: code })
     });
-    if (!resp.ok) throw new Error('Save failed');
-    alert('Card saved! Starting a new card.');
-    sides.front.strokes = [];
-    sides.front.redoStack = [];
-    sides.front.backgroundImage = null;
-    sides.back.strokes = [];
-    sides.back.redoStack = [];
-    sides.back.backgroundImage = null;
-    switchSide('front');
-  } catch (err) {
-    alert('Could not save card: ' + err.message);
-  }
-});
 
-function renderSideToDataURL(side) {
-  const rect = canvas.getBoundingClientRect();
-  const off = document.createElement('canvas');
-  off.width = rect.width;
-  off.height = rect.height;
-  const offCtx = off.getContext('2d');
-  offCtx.fillStyle = '#ffffff';
-  offCtx.fillRect(0, 0, off.width, off.height);
+    const data = await resp.json();
 
-  const bg = sides[side].backgroundImage;
-  if (bg) {
-    drawImageContained(offCtx, bg, off.width, off.height);
-  }
-
-  for (const stroke of sides[side].strokes) {
-    offCtx.strokeStyle = stroke.erase ? '#ffffff' : stroke.color;
-    offCtx.lineJoin = 'round';
-    offCtx.lineCap = 'round';
-    for (let i = 1; i < stroke.points.length; i++) {
-      const p0 = stroke.points[i - 1];
-      const p1 = stroke.points[i];
-      offCtx.lineWidth = stroke.width * (0.5 + p1.pressure);
-      offCtx.beginPath();
-      offCtx.moveTo(p0.x, p0.y);
-      offCtx.lineTo(p1.x, p1.y);
-      offCtx.stroke();
+    if (!resp.ok) {
+      showMessage(data.error || 'That code is invalid or already used.', 'error');
+      btn.disabled = false;
+      return;
     }
+
+    showMessage('Paired! Taking you to the drawing canvas...', 'success');
+
+    // Fetch the device token via status, then redirect into /draw with it
+    const statusResp = await fetch(`/api/pair/status?pairing_id=${data.pairing_id}`);
+    const statusData = await statusResp.json();
+
+    setTimeout(() => {
+      window.location.href = `/draw?token=${encodeURIComponent(statusData.device_token)}`;
+    }, 800);
+
+  } catch (err) {
+    showMessage('Something went wrong. Try again.', 'error');
+    btn.disabled = false;
   }
-  return off.toDataURL('image/png');
 }
 
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
+function showMessage(text, type) {
+  msg.textContent = text;
+  msg.className = 'message' + (type ? ' ' + type : '');
+}
 </script>
 </body>
 </html>
