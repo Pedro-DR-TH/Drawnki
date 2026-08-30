@@ -368,10 +368,14 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
       })
     });
     if (!resp.ok) throw new Error('Save failed');
-    alert('Card saved! It will appear in Anki shortly.');
+    alert('Card saved! Starting a new card.');
     sides.front.strokes = [];
+    sides.front.redoStack = [];
+    sides.front.backgroundImage = null;
     sides.back.strokes = [];
-    redraw();
+    sides.back.redoStack = [];
+    sides.back.backgroundImage = null;
+    switchSide('front');
   } catch (err) {
     alert('Could not save card: ' + err.message);
   }
