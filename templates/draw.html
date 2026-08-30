@@ -172,6 +172,7 @@
     <button id="clearBtn">Clear</button>
     <button id="uploadBtn">Upload Image</button>
     <input type="file" id="fileInput" accept="image/*" style="display:none">
+    <button id="fingerDrawBtn">Finger Draw: Off</button>
 
     <div class="spacer"></div>
 
@@ -209,20 +210,14 @@ function resizeCanvas() {
   redraw();
 }
 
-const PALM_SUPPRESSION_MS = 750; // ignore touch input for this long after any pen activity
-let lastPenActivity = 0;
+let fingerDrawEnabled = false;
 
 function isPalmContact(e) {
   if (e.pointerType === 'mouse') return false;
-
-  if (e.pointerType === 'pen') {
-    lastPenActivity = Date.now();
-    return false;
-  }
+  if (e.pointerType === 'pen') return false;
 
   if (e.pointerType === 'touch') {
-    const sincePen = Date.now() - lastPenActivity;
-    if (sincePen < PALM_SUPPRESSION_MS) return true;
+    return !fingerDrawEnabled;
   }
 
   return false;
@@ -279,12 +274,6 @@ function drawStroke(stroke) {
     ctx.stroke();
   }
 }
-
-canvas.addEventListener('pointermove', (e) => {
-  if (e.pointerType === 'pen') {
-    lastPenActivity = Date.now();
-  }
-});
 
 canvas.addEventListener('pointerdown', (e) => {
   e.preventDefault();
@@ -359,6 +348,11 @@ document.getElementById('clearBtn').addEventListener('click', () => {
   sides[currentSide].redoStack = [];
   sides[currentSide].backgroundImage = null;
   redraw();
+});
+
+document.getElementById('fingerDrawBtn').addEventListener('click', (e) => {
+  fingerDrawEnabled = !fingerDrawEnabled;
+  e.target.textContent = fingerDrawEnabled ? 'Finger Draw: On' : 'Finger Draw: Off';
 });
 
 document.getElementById('uploadBtn').addEventListener('click', () => {
