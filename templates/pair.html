@@ -123,9 +123,28 @@ function formatPairingCode(raw) {
   return formatted;
 }
 
-input.addEventListener('input', () => {
-  input.value = formatPairingCode(input.value);
+let isFormatting = false;
+
+input.addEventListener('paste', (e) => {
+  e.preventDefault();
+  const pasted = (e.clipboardData || window.clipboardData).getData('text');
+  isFormatting = true;
+  input.value = formatPairingCode(pasted);
   input.setSelectionRange(input.value.length, input.value.length);
+  isFormatting = false;
+});
+
+input.addEventListener('input', () => {
+  if (isFormatting) return;
+  isFormatting = true;
+
+  const formatted = formatPairingCode(input.value);
+  if (input.value !== formatted) {
+    input.value = formatted;
+  }
+  input.setSelectionRange(input.value.length, input.value.length);
+
+  isFormatting = false;
 });
 
 input.addEventListener('focus', () => {
