@@ -12,7 +12,12 @@
     --accent: #2f6fed;
   }
 
-  * { box-sizing: border-box; }
+  * {
+    box-sizing: border-box;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -webkit-touch-callout: none !important;
+  }
 
   html, body {
     margin: 0;
@@ -21,8 +26,10 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     color: var(--ink);
     overflow: hidden;
-    /* prevent iPad from scrolling/zooming while drawing */
     touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
   }
 
   .app {
@@ -173,6 +180,10 @@
 </div>
 
 <script>
+document.addEventListener('selectstart', (e) => {
+  e.preventDefault();
+});
+
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
