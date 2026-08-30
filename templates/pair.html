@@ -124,11 +124,8 @@ function formatPairingCode(raw) {
 }
 
 input.addEventListener('input', () => {
-  const cursorWasAtEnd = input.selectionStart === input.value.length;
   input.value = formatPairingCode(input.value);
-  if (cursorWasAtEnd) {
-    input.setSelectionRange(input.value.length, input.value.length);
-  }
+  input.setSelectionRange(input.value.length, input.value.length);
 });
 
 input.addEventListener('focus', () => {
