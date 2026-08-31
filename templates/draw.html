@@ -172,7 +172,6 @@
     <button id="clearBtn">Clear</button>
     <button id="uploadBtn">Upload Image</button>
     <input type="file" id="fileInput" accept="image/*" style="display:none">
-    <button id="fingerDrawBtn">Finger Draw: Off</button>
 
     <div class="spacer"></div>
 
@@ -180,18 +179,16 @@
   </div>
 </div>
 
-<script>
-document.addEventListener('selectstart', (e) => {
-  e.preventDefault();
-});
+<script type="module">
+import { getStroke } from "https://esm.sh/perfect-freehand@1.2.0";
 
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
 // Separate in-memory strokes per side so switching Front/Back doesn't lose work
 const sides = {
-  front: { strokes: [], redoStack: [], backgroundImage: null },
-  back: { strokes: [], redoStack: [], backgroundImage: null }
+  front: { strokes: [], redoStack: [], backgroundImage: null, committedCanvas: null },
+  back: { strokes: [], redoStack: [], backgroundImage: null, committedCanvas: null }
 };
 let currentSide = 'front';
 
@@ -199,6 +196,7 @@ let currentColor = '#1a1a1a';
 let currentWidth = 3;
 let isErasing = false;
 let drawing = false;
+let activePointerId = null;
 let currentStroke = null;
 
 function resizeCanvas() {
@@ -206,21 +204,18 @@ function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
   canvas.width = rect.width * dpr;
   canvas.height = rect.height * dpr;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.scale(dpr, dpr);
+
+  for (const key of ['front', 'back']) {
+    sides[key].committedCanvas = null;
+  }
+  renderCommitted(currentSide);
   redraw();
 }
 
-let fingerDrawEnabled = false;
-
-function isPalmContact(e) {
-  if (e.pointerType === 'mouse') return false;
-  if (e.pointerType === 'pen') return false;
-
-  if (e.pointerType === 'touch') {
-    return !fingerDrawEnabled;
-  }
-
-  return false;
+function isDrawingInput(e) {
+  return e.pointerType === 'pen' || e.pointerType === 'mouse' || e.pointerType === 'touch';
 }
 
 function getPos(e) {
@@ -232,24 +227,53 @@ function getPos(e) {
   };
 }
 
-function redraw() {
-  const rect = canvas.getBoundingClientRect();
-  ctx.clearRect(0, 0, rect.width, rect.height);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, rect.width, rect.height);
+function getCommittedCanvas(side) {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
 
-  const bg = sides[currentSide].backgroundImage;
+  if (!sides[side].committedCanvas) {
+    const off = document.createElement('canvas');
+    off.width = rect.width * dpr;
+    off.height = rect.height * dpr;
+    sides[side].committedCanvas = off;
+  }
+  return sides[side].committedCanvas;
+}
+
+function renderCommitted(side) {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const off = getCommittedCanvas(side);
+  const offCtx = off.getContext('2d');
+
+  offCtx.setTransform(1, 0, 0, 1, 0, 0);
+  offCtx.clearRect(0, 0, off.width, off.height);
+  offCtx.scale(dpr, dpr);
+
+  offCtx.fillStyle = '#ffffff';
+  offCtx.fillRect(0, 0, rect.width, rect.height);
+
+  const bg = sides[side].backgroundImage;
   if (bg) {
-    drawImageContained(ctx, bg, rect.width, rect.height);
+    drawImageContained(offCtx, bg, rect.width, rect.height);
   }
 
-  for (const stroke of sides[currentSide].strokes) {
-    drawStroke(stroke);
+  for (const stroke of sides[side].strokes) {
+    drawStroke(stroke, offCtx);
   }
 }
 
+function redraw() {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(getCommittedCanvas(currentSide), 0, 0);
+  ctx.scale(dpr, dpr);
+}
+
 function drawImageContained(context, img, canvasW, canvasH) {
-  // scale the uploaded image to fit within the canvas, centered, preserving aspect ratio
   const scale = Math.min(canvasW / img.width, canvasH / img.height);
   const w = img.width * scale;
   const h = img.height * scale;
@@ -258,29 +282,38 @@ function drawImageContained(context, img, canvasW, canvasH) {
   context.drawImage(img, x, y, w, h);
 }
 
-function drawStroke(stroke) {
-  if (stroke.points.length < 2) return;
-  ctx.strokeStyle = stroke.erase ? '#ffffff' : stroke.color;
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
+function drawStroke(stroke, targetCtx = ctx) {
+  if (stroke.points.length < 1) return;
 
-  for (let i = 1; i < stroke.points.length; i++) {
-    const p0 = stroke.points[i - 1];
-    const p1 = stroke.points[i];
-    ctx.lineWidth = stroke.width * (0.5 + p1.pressure);
-    ctx.beginPath();
-    ctx.moveTo(p0.x, p0.y);
-    ctx.lineTo(p1.x, p1.y);
-    ctx.stroke();
+  const inputPoints = stroke.points.map(p => [p.x, p.y, p.pressure]);
+  const usesRealPressure = stroke.points.some(p => p.pressure !== 0.5);
+
+  const outline = getStroke(inputPoints, {
+    size: stroke.width * 3.2,
+    thinning: 0.6,
+    smoothing: 0.55,
+    streamline: 0.55,
+    simulatePressure: !usesRealPressure
+  });
+
+  if (!outline.length) return;
+
+  targetCtx.fillStyle = stroke.erase ? '#ffffff' : stroke.color;
+  targetCtx.beginPath();
+  targetCtx.moveTo(outline[0][0], outline[0][1]);
+  for (let i = 1; i < outline.length; i++) {
+    targetCtx.lineTo(outline[i][0], outline[i][1]);
   }
+  targetCtx.closePath();
+  targetCtx.fill();
 }
 
 canvas.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  if (isPalmContact(e)) return;
+  if (!isDrawingInput(e)) return;
 
   canvas.setPointerCapture(e.pointerId);
   drawing = true;
+  activePointerId = e.pointerId;
   const pos = getPos(e);
   currentStroke = {
     color: currentColor,
@@ -292,23 +325,38 @@ canvas.addEventListener('pointerdown', (e) => {
 
 canvas.addEventListener('pointermove', (e) => {
   if (!drawing) return;
-  if (isPalmContact(e)) {
-    endStroke();
-    return;
+  if (!isDrawingInput(e)) return;
+
+  const events = (typeof e.getCoalescedEvents === 'function' && e.getCoalescedEvents().length)
+    ? e.getCoalescedEvents()
+    : [e];
+
+  for (const evt of events) {
+    currentStroke.points.push(getPos(evt));
   }
-  const pos = getPos(e);
-  currentStroke.points.push(pos);
-  drawStroke({ ...currentStroke, points: currentStroke.points.slice(-2) });
+
+  redraw();
+  drawStroke(currentStroke);
 });
 
 function endStroke() {
   if (!drawing) return;
   drawing = false;
+  if (activePointerId !== null) {
+    try {
+      canvas.releasePointerCapture(activePointerId);
+    } catch (err) {
+      // pointer may already be released - safe to ignore
+    }
+    activePointerId = null;
+  }
   if (currentStroke && currentStroke.points.length > 1) {
     sides[currentSide].strokes.push(currentStroke);
     sides[currentSide].redoStack = [];
+    renderCommitted(currentSide);
   }
   currentStroke = null;
+  redraw();
 }
 
 canvas.addEventListener('pointerup', endStroke);
@@ -339,6 +387,7 @@ document.getElementById('undoBtn').addEventListener('click', () => {
   const s = sides[currentSide];
   if (s.strokes.length === 0) return;
   s.redoStack.push(s.strokes.pop());
+  renderCommitted(currentSide);
   redraw();
 });
 
@@ -347,12 +396,8 @@ document.getElementById('clearBtn').addEventListener('click', () => {
   sides[currentSide].strokes = [];
   sides[currentSide].redoStack = [];
   sides[currentSide].backgroundImage = null;
+  renderCommitted(currentSide);
   redraw();
-});
-
-document.getElementById('fingerDrawBtn').addEventListener('click', (e) => {
-  fingerDrawEnabled = !fingerDrawEnabled;
-  e.target.textContent = fingerDrawEnabled ? 'Finger Draw: On' : 'Finger Draw: Off';
 });
 
 document.getElementById('uploadBtn').addEventListener('click', () => {
@@ -368,6 +413,7 @@ document.getElementById('fileInput').addEventListener('change', (e) => {
     const img = new Image();
     img.onload = () => {
       sides[currentSide].backgroundImage = img;
+      renderCommitted(currentSide);
       redraw();
     };
     img.src = ev.target.result;
@@ -386,6 +432,7 @@ function switchSide(side) {
   currentSide = side;
   document.getElementById('frontBtn').classList.toggle('active', side === 'front');
   document.getElementById('backBtn').classList.toggle('active', side === 'back');
+  renderCommitted(currentSide);
   redraw();
 }
 
@@ -436,19 +483,9 @@ function renderSideToDataURL(side) {
   }
 
   for (const stroke of sides[side].strokes) {
-    offCtx.strokeStyle = stroke.erase ? '#ffffff' : stroke.color;
-    offCtx.lineJoin = 'round';
-    offCtx.lineCap = 'round';
-    for (let i = 1; i < stroke.points.length; i++) {
-      const p0 = stroke.points[i - 1];
-      const p1 = stroke.points[i];
-      offCtx.lineWidth = stroke.width * (0.5 + p1.pressure);
-      offCtx.beginPath();
-      offCtx.moveTo(p0.x, p0.y);
-      offCtx.lineTo(p1.x, p1.y);
-      offCtx.stroke();
-    }
+    drawStroke(stroke, offCtx);
   }
+
   return off.toDataURL('image/png');
 }
 
