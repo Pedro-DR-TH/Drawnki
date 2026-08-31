@@ -301,6 +301,7 @@ function drawStroke(stroke, targetCtx = ctx) {
 
 canvas.addEventListener('pointerdown', (e) => {
   if (!isDrawingInput(e)) return;
+  e.preventDefault();
 
   try {
     canvas.setPointerCapture(e.pointerId);
@@ -322,6 +323,7 @@ canvas.addEventListener('pointerdown', (e) => {
 canvas.addEventListener('pointermove', (e) => {
   if (!drawing) return;
   if (!isDrawingInput(e)) return;
+  e.preventDefault();
 
   const events = (typeof e.getCoalescedEvents === 'function' && e.getCoalescedEvents().length)
     ? e.getCoalescedEvents()
