@@ -188,9 +188,7 @@ let currentSide = 'front';
 let currentColor = '#1a1a1a';
 let currentWidth = 3;
 let isErasing = false;
-let drawing = false;
-let activePointerId = null;
-let currentStroke = null;
+const activeStrokes = new Map();
 
 function resizeCanvas() {
   const rect = canvas.parentElement.getBoundingClientRect();
@@ -309,52 +307,62 @@ canvas.addEventListener('pointerdown', (e) => {
     // capture may already be held or invalid - safe to continue anyway
   }
 
-  drawing = true;
-  activePointerId = e.pointerId;
   const pos = getPos(e);
-  currentStroke = {
+  activeStrokes.set(e.pointerId, {
     color: currentColor,
     width: currentWidth,
     erase: isErasing,
     points: [pos]
-  };
+  });
 });
 
 canvas.addEventListener('pointermove', (e) => {
-  if (!drawing) return;
+  if (!activeStrokes.has(e.pointerId)) return;
   if (!isDrawingInput(e)) return;
   e.preventDefault();
+
+  const stroke = activeStrokes.get(e.pointerId);
 
   const events = (typeof e.getCoalescedEvents === 'function' && e.getCoalescedEvents().length)
     ? e.getCoalescedEvents()
     : [e];
 
   for (const evt of events) {
-    currentStroke.points.push(getPos(evt));
+    stroke.points.push(getPos(evt));
   }
 
-  redraw();
-  drawStroke(currentStroke);
+  redrawWithActiveStrokes();
 });
 
-function endStroke() {
-  if (!drawing) return;
-  drawing = false;
-  if (activePointerId !== null) {
+function redrawWithActiveStrokes() {
+  redraw();
+  for (const stroke of activeStrokes.values()) {
+    drawStroke(stroke);
+  }
+}
+
+function endStroke(e) {
+  if (e && !activeStrokes.has(e.pointerId)) return;
+
+  const pointerId = e ? e.pointerId : null;
+  const stroke = pointerId !== null ? activeStrokes.get(pointerId) : null;
+
+  if (pointerId !== null) {
+    activeStrokes.delete(pointerId);
     try {
-      canvas.releasePointerCapture(activePointerId);
+      canvas.releasePointerCapture(pointerId);
     } catch (err) {
       // pointer may already be released - safe to ignore
     }
-    activePointerId = null;
   }
-  if (currentStroke && currentStroke.points.length > 1) {
-    sides[currentSide].strokes.push(currentStroke);
+
+  if (stroke && stroke.points.length > 1) {
+    sides[currentSide].strokes.push(stroke);
     sides[currentSide].redoStack = [];
     renderCommitted(currentSide);
   }
-  currentStroke = null;
-  redraw();
+
+  redrawWithActiveStrokes();
 }
 
 canvas.addEventListener('pointerup', endStroke);
