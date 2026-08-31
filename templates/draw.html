@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Drawnki</title>
-<link rel="stylesheet" href="https://esm.sh/tldraw@3.0.0/tldraw.css">
 <style>
   :root {
     --ink: #1a1a1a;
@@ -13,7 +12,12 @@
     --accent: #2f6fed;
   }
 
-  * { box-sizing: border-box; }
+  * {
+    box-sizing: border-box;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -webkit-touch-callout: none !important;
+  }
 
   html, body {
     margin: 0;
@@ -22,6 +26,7 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     color: var(--ink);
     overflow: hidden;
+    touch-action: none;
   }
 
   .app {
@@ -37,15 +42,13 @@
     padding: 10px 14px;
     border-bottom: 1px solid var(--line);
     flex-shrink: 0;
-    z-index: 10;
-    position: relative;
-    background: var(--paper);
   }
 
   header h1 {
     font-size: 15px;
     font-weight: 600;
     margin: 0;
+    letter-spacing: 0.2px;
   }
 
   .side-toggle {
@@ -70,30 +73,69 @@
     color: white;
   }
 
-  .save-btn {
-    background: var(--accent);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    padding: 8px 16px;
-    font-weight: 600;
-    font-size: 14px;
-    cursor: pointer;
-  }
-
-  .editor-wrap {
+  .canvas-wrap {
     flex: 1;
     position: relative;
     min-height: 0;
   }
 
-  .editor-instance {
+  canvas {
     position: absolute;
-    inset: 0;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+    background: white;
   }
 
-  .editor-instance.hidden {
-    display: none;
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--line);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  .toolbar button {
+    border: 1px solid var(--line);
+    background: white;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .toolbar button:active {
+    background: #eee;
+  }
+
+  .swatch {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .swatch.selected {
+    border-color: var(--ink);
+  }
+
+  .spacer { flex: 1; }
+
+  .save-btn {
+    background: var(--accent) !important;
+    color: white !important;
+    border: none !important;
+    font-weight: 600;
+  }
+
+  input[type="range"] {
+    width: 90px;
   }
 </style>
 </head>
@@ -105,44 +147,276 @@
       <button id="frontBtn" class="active">Front</button>
       <button id="backBtn">Back</button>
     </div>
-    <button id="saveBtn" class="save-btn">Save Card</button>
   </header>
 
-  <div class="editor-wrap">
-    <div id="frontEditor" class="editor-instance"></div>
-    <div id="backEditor" class="editor-instance hidden"></div>
+  <div class="canvas-wrap">
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <div class="toolbar">
+    <button class="swatch selected" data-color="#1a1a1a" style="background:#1a1a1a"></button>
+    <button class="swatch" data-color="#e0473a" style="background:#e0473a"></button>
+    <button class="swatch" data-color="#2f6fed" style="background:#2f6fed"></button>
+    <button class="swatch" data-color="#22a35f" style="background:#22a35f"></button>
+
+    <input type="range" id="widthSlider" min="1" max="16" value="3">
+
+    <button id="eraserBtn">Eraser</button>
+    <button id="undoBtn">Undo</button>
+    <button id="clearBtn">Clear</button>
+    <button id="uploadBtn">Upload Image</button>
+    <input type="file" id="fileInput" accept="image/*" style="display:none">
+
+    <div class="spacer"></div>
+
+    <button id="saveBtn" class="save-btn">Save Card</button>
   </div>
 </div>
 
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@18.2.0?target=esnext",
-    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client?target=esnext&deps=react@18.2.0",
-    "tldraw": "https://esm.sh/tldraw@3.0.0?target=esnext&deps=react@18.2.0,react-dom@18.2.0"
+<script type="module">
+import { getStroke } from "https://esm.sh/perfect-freehand@1.2.0";
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+const sides = {
+  front: { strokes: [], redoStack: [], backgroundImage: null, committedCanvas: null },
+  back: { strokes: [], redoStack: [], backgroundImage: null, committedCanvas: null }
+};
+let currentSide = 'front';
+
+let currentColor = '#1a1a1a';
+let currentWidth = 3;
+let isErasing = false;
+let drawing = false;
+let activePointerId = null;
+let currentStroke = null;
+
+function resizeCanvas() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+
+  for (const key of ['front', 'back']) {
+    sides[key].committedCanvas = null;
+  }
+  renderCommitted(currentSide);
+  redraw();
+}
+
+function isDrawingInput(e) {
+  return e.pointerType === 'pen' || e.pointerType === 'mouse' || e.pointerType === 'touch';
+}
+
+function getPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top,
+    pressure: e.pressure && e.pressure > 0 ? e.pressure : 0.5
+  };
+}
+
+function getCommittedCanvas(side) {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+
+  if (!sides[side].committedCanvas) {
+    const off = document.createElement('canvas');
+    off.width = rect.width * dpr;
+    off.height = rect.height * dpr;
+    sides[side].committedCanvas = off;
+  }
+  return sides[side].committedCanvas;
+}
+
+function renderCommitted(side) {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const off = getCommittedCanvas(side);
+  const offCtx = off.getContext('2d');
+
+  offCtx.setTransform(1, 0, 0, 1, 0, 0);
+  offCtx.clearRect(0, 0, off.width, off.height);
+  offCtx.scale(dpr, dpr);
+
+  offCtx.fillStyle = '#ffffff';
+  offCtx.fillRect(0, 0, rect.width, rect.height);
+
+  const bg = sides[side].backgroundImage;
+  if (bg) {
+    drawImageContained(offCtx, bg, rect.width, rect.height);
+  }
+
+  for (const stroke of sides[side].strokes) {
+    drawStroke(stroke, offCtx);
   }
 }
-</script>
 
-<script type="module">
-import React from "react";
-import { createRoot } from "react-dom/client";
-import { Tldraw } from "tldraw";
-
-let frontEditor = null;
-let backEditor = null;
-
-function mountEditor(containerId, onMount) {
-  const root = createRoot(document.getElementById(containerId));
-  root.render(
-    React.createElement(Tldraw, { onMount })
-  );
+function redraw() {
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(getCommittedCanvas(currentSide), 0, 0);
+  ctx.scale(dpr, dpr);
 }
 
-mountEditor('frontEditor', (editor) => { frontEditor = editor; });
-mountEditor('backEditor', (editor) => { backEditor = editor; });
+function drawImageContained(context, img, canvasW, canvasH) {
+  const scale = Math.min(canvasW / img.width, canvasH / img.height);
+  const w = img.width * scale;
+  const h = img.height * scale;
+  const x = (canvasW - w) / 2;
+  const y = (canvasH - h) / 2;
+  context.drawImage(img, x, y, w, h);
+}
 
-let currentSide = 'front';
+function drawStroke(stroke, targetCtx = ctx) {
+  if (stroke.points.length < 1) return;
+
+  const inputPoints = stroke.points.map(p => [p.x, p.y, p.pressure]);
+  const usesRealPressure = stroke.points.some(p => p.pressure !== 0.5);
+
+  const outline = getStroke(inputPoints, {
+    size: stroke.width * 3.2,
+    thinning: 0.6,
+    smoothing: 0.55,
+    streamline: 0.55,
+    simulatePressure: !usesRealPressure
+  });
+
+  if (!outline.length) return;
+
+  targetCtx.fillStyle = stroke.erase ? '#ffffff' : stroke.color;
+  targetCtx.beginPath();
+  targetCtx.moveTo(outline[0][0], outline[0][1]);
+  for (let i = 1; i < outline.length; i++) {
+    targetCtx.lineTo(outline[i][0], outline[i][1]);
+  }
+  targetCtx.closePath();
+  targetCtx.fill();
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (!isDrawingInput(e)) return;
+
+  try {
+    canvas.setPointerCapture(e.pointerId);
+  } catch (err) {
+    // capture may already be held or invalid - safe to continue anyway
+  }
+
+  drawing = true;
+  activePointerId = e.pointerId;
+  const pos = getPos(e);
+  currentStroke = {
+    color: currentColor,
+    width: currentWidth,
+    erase: isErasing,
+    points: [pos]
+  };
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (!drawing) return;
+  if (!isDrawingInput(e)) return;
+
+  const events = (typeof e.getCoalescedEvents === 'function' && e.getCoalescedEvents().length)
+    ? e.getCoalescedEvents()
+    : [e];
+
+  for (const evt of events) {
+    currentStroke.points.push(getPos(evt));
+  }
+
+  redraw();
+  drawStroke(currentStroke);
+});
+
+function endStroke() {
+  if (!drawing) return;
+  drawing = false;
+  if (activePointerId !== null) {
+    try {
+      canvas.releasePointerCapture(activePointerId);
+    } catch (err) {
+      // pointer may already be released - safe to ignore
+    }
+    activePointerId = null;
+  }
+  if (currentStroke && currentStroke.points.length > 1) {
+    sides[currentSide].strokes.push(currentStroke);
+    sides[currentSide].redoStack = [];
+    renderCommitted(currentSide);
+  }
+  currentStroke = null;
+  redraw();
+}
+
+canvas.addEventListener('pointerup', endStroke);
+canvas.addEventListener('pointercancel', endStroke);
+canvas.addEventListener('pointerleave', endStroke);
+
+document.querySelectorAll('.swatch').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.swatch').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    currentColor = btn.dataset.color;
+    isErasing = false;
+    document.getElementById('eraserBtn').textContent = 'Eraser';
+  });
+});
+
+document.getElementById('widthSlider').addEventListener('input', (e) => {
+  currentWidth = Number(e.target.value);
+});
+
+document.getElementById('eraserBtn').addEventListener('click', (e) => {
+  isErasing = !isErasing;
+  e.target.textContent = isErasing ? 'Erasing' : 'Eraser';
+});
+
+document.getElementById('undoBtn').addEventListener('click', () => {
+  const s = sides[currentSide];
+  if (s.strokes.length === 0) return;
+  s.redoStack.push(s.strokes.pop());
+  renderCommitted(currentSide);
+  redraw();
+});
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  if (!confirm('Clear this side?')) return;
+  sides[currentSide].strokes = [];
+  sides[currentSide].redoStack = [];
+  sides[currentSide].backgroundImage = null;
+  renderCommitted(currentSide);
+  redraw();
+});
+
+document.getElementById('uploadBtn').addEventListener('click', () => {
+  document.getElementById('fileInput').click();
+});
+
+document.getElementById('fileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = () => {
+      sides[currentSide].backgroundImage = img;
+      renderCommitted(currentSide);
+      redraw();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+
+  e.target.value = '';
+});
 
 document.getElementById('frontBtn').addEventListener('click', () => switchSide('front'));
 document.getElementById('backBtn').addEventListener('click', () => switchSide('back'));
@@ -151,55 +425,13 @@ function switchSide(side) {
   currentSide = side;
   document.getElementById('frontBtn').classList.toggle('active', side === 'front');
   document.getElementById('backBtn').classList.toggle('active', side === 'back');
-  document.getElementById('frontEditor').classList.toggle('hidden', side !== 'front');
-  document.getElementById('backEditor').classList.toggle('hidden', side !== 'back');
-}
-
-async function exportEditorToDataURL(editor) {
-  if (!editor) return null;
-  const shapeIds = editor.getCurrentPageShapeIds();
-  if (shapeIds.size === 0) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 800;
-    canvas.height = 600;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/png');
-  }
-
-  const { blob } = await editor.toImage([...shapeIds], {
-    format: 'png',
-    background: true,
-    padding: 16
-  });
-
-  return await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
-
-function clearEditor(editor) {
-  if (!editor) return;
-  const shapeIds = editor.getCurrentPageShapeIds();
-  if (shapeIds.size > 0) {
-    editor.deleteShapes([...shapeIds]);
-  }
+  renderCommitted(currentSide);
+  redraw();
 }
 
 document.getElementById('saveBtn').addEventListener('click', async () => {
-  let frontData, backData;
-
-  try {
-    frontData = await exportEditorToDataURL(frontEditor);
-    backData = await exportEditorToDataURL(backEditor);
-  } catch (err) {
-    alert('Could not export drawing: ' + err.message);
-    return;
-  }
+  const frontData = renderSideToDataURL('front');
+  const backData = renderSideToDataURL('back');
 
   const params = new URLSearchParams(window.location.search);
   const deviceToken = params.get('token');
@@ -215,15 +447,44 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
       })
     });
     if (!resp.ok) throw new Error('Save failed');
-
     alert('Card saved! Starting a new card.');
-    clearEditor(frontEditor);
-    clearEditor(backEditor);
+    sides.front.strokes = [];
+    sides.front.redoStack = [];
+    sides.front.backgroundImage = null;
+    sides.back.strokes = [];
+    sides.back.redoStack = [];
+    sides.back.backgroundImage = null;
+    renderCommitted('front');
+    renderCommitted('back');
     switchSide('front');
   } catch (err) {
     alert('Could not save card: ' + err.message);
   }
 });
+
+function renderSideToDataURL(side) {
+  const rect = canvas.getBoundingClientRect();
+  const off = document.createElement('canvas');
+  off.width = rect.width;
+  off.height = rect.height;
+  const offCtx = off.getContext('2d');
+  offCtx.fillStyle = '#ffffff';
+  offCtx.fillRect(0, 0, off.width, off.height);
+
+  const bg = sides[side].backgroundImage;
+  if (bg) {
+    drawImageContained(offCtx, bg, off.width, off.height);
+  }
+
+  for (const stroke of sides[side].strokes) {
+    drawStroke(stroke, offCtx);
+  }
+
+  return off.toDataURL('image/png');
+}
+
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
 </script>
 </body>
 </html>
