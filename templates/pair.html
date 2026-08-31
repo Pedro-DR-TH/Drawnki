@@ -106,7 +106,7 @@
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
 <script>
 const input = document.getElementById('codeInput');
@@ -256,6 +256,12 @@ function stopScanner() {
 function scanFrame() {
   if (!scanning) return;
 
+  if (typeof jsQR === 'undefined') {
+    showMessage('QR scanner failed to load. Try refreshing.', 'error');
+    stopScanner();
+    return;
+  }
+
   if (scannerVideo.readyState === scannerVideo.HAVE_ENOUGH_DATA) {
     scannerCanvas.width = scannerVideo.videoWidth;
     scannerCanvas.height = scannerVideo.videoHeight;
@@ -263,7 +269,9 @@ function scanFrame() {
     ctx.drawImage(scannerVideo, 0, 0, scannerCanvas.width, scannerCanvas.height);
 
     const imageData = ctx.getImageData(0, 0, scannerCanvas.width, scannerCanvas.height);
-    const result = jsQR(imageData.data, imageData.width, imageData.height);
+    const result = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: 'attemptBoth'
+    });
 
     if (result && result.data) {
       isFormatting = true;
