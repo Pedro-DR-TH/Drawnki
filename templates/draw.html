@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no">
 <title>Drawnki</title>
 <style>
   :root {
@@ -296,6 +296,14 @@ function drawStroke(stroke, targetCtx = ctx) {
   targetCtx.closePath();
   targetCtx.fill();
 }
+
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+}, { passive: false });
+
+document.addEventListener('gesturestart', (e) => {
+  e.preventDefault();
+});
 
 canvas.addEventListener('pointerdown', (e) => {
   if (!isDrawingInput(e)) return;
