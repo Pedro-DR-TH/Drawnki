@@ -45,6 +45,12 @@ def pair_page():
     return render_template("pair.html")
 
 
+@app.route("/debug")
+def debug_page():
+    from flask import render_template
+    return render_template("debug.html")
+
+
 @app.route("/draw")
 def draw_page():
     from flask import render_template
