@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Drawing Debug</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    touch-action: none;
+    overflow: hidden;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: 70%;
+    background: white;
+    touch-action: none;
+  }
+  #log {
+    height: 30%;
+    overflow-y: scroll;
+    font-family: monospace;
+    font-size: 11px;
+    background: black;
+    color: lime;
+    padding: 4px;
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="log"></div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const logEl = document.getElementById('log');
+
+function log(msg) {
+  logEl.textContent += msg + '\n';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function resize() {
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+let drawing = false;
+let lastX = 0;
+let lastY = 0;
+
+canvas.addEventListener('pointerdown', (e) => {
+  log(`DOWN id=${e.pointerId} type=${e.pointerType} x=${e.clientX.toFixed(0)} y=${e.clientY.toFixed(0)}`);
+  drawing = true;
+  const rect = canvas.getBoundingClientRect();
+  lastX = e.clientX - rect.left;
+  lastY = e.clientY - rect.top;
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (!drawing) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  ctx.strokeStyle = 'black';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(lastX, lastY);
+  ctx.lineTo(x, y);
+  ctx.stroke();
+  lastX = x;
+  lastY = y;
+});
+
+canvas.addEventListener('pointerup', (e) => {
+  log(`UP   id=${e.pointerId} type=${e.pointerType}`);
+  drawing = false;
+});
+
+canvas.addEventListener('pointercancel', (e) => {
+  log(`CANCEL id=${e.pointerId} type=${e.pointerType}`);
+  drawing = false;
+});
+</script>
+</body>
+</html>
