@@ -123,7 +123,6 @@ def draw_page():
 
 
 @app.route("/api/pair/init", methods=["POST"])
-@require_auth
 def api_pair_init():
     body = request.get_json(silent=True) or {}
     deck_name = body.get("deck_name", "Unnamed Deck")
@@ -146,7 +145,6 @@ def api_pair_init():
 
 
 @app.route("/api/pair/status")
-@require_auth
 def api_pair_status():
     pairing_id = request.args.get("pairing_id")
 
@@ -220,7 +218,6 @@ def api_cards_create():
 
 
 @app.route("/api/cards/poll")
-@require_auth
 def api_cards_poll():
     device_token = request.args.get("device_token")
 
